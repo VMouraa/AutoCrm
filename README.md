@@ -1,6 +1,8 @@
 ﻿# AutoCRM — CRM para revendas de veículos
 
-Backend em desenvolvimento com Django REST Framework e SQLite. Frontend ainda não implementado.
+Backend em desenvolvimento com Django REST Framework e SQLite. Frontend inicial
+em React, TypeScript, Vite e Tailwind CSS, com Dashboard, Estoque e Clientes.
+Consulte [como executar e entender o frontend](frontend/README.md).
 
 ## Arquitetura
 
@@ -93,10 +95,9 @@ SQLite e validadores de senha vazios. Produção requer configuração própria,
 segredos, HTTPS, backups e revisão de permissões. Não há CI configurado.
 Transições de status seguem as opções do modelo, sem regras comerciais extras.
 Importação não possui interface nem integração ativa com terceiros.
-React, funil, negociações, distribuição de leads, notificações, Radar e relatórios
-permanecem planejados.
+Integração do React com a API, funil, negociações, distribuição de leads,
+notificações, Radar e relatórios permanecem planejados.
 
-A pasta recebida não contém repositório `.git`: alterações feitas no disco, sem
-commit ou publicação. Inclua migrações e lockfile no versionamento.
+O projeto contém repositório Git. Inclua migrações e lockfiles no versionamento.
 
 Resultado local: **24 testes passaram**; manage.py check sem problemas; nenhuma alteração de modelo sem migração; pip check sem dependências quebradas. Validação local, sem CI ou teste em produção.
