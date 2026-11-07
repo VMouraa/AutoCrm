@@ -1,6 +1,17 @@
 from datetime import date
 from rest_framework import serializers
-from .models import Vehicle
+from .models import StoreMembership, Vehicle
+
+
+class StoreAccessSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(source="store_id", read_only=True)
+    name = serializers.CharField(source="store.name", read_only=True)
+
+    class Meta:
+        model = StoreMembership
+        fields = ["id", "name", "role"]
+        read_only_fields = ["id", "name", "role"]
+
 
 class VehicleSerializer(serializers.ModelSerializer):
     class Meta:

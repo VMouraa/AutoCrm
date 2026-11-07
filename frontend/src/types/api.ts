@@ -15,6 +15,15 @@ export interface PaginatedResponse<T> {
   results: T[]
 }
 
+export type StoreRole = 'manager' | 'seller'
+
+export interface Store {
+  id: number
+  name: string
+  /** Papel do usuário autenticado nesta loja. */
+  role: StoreRole
+}
+
 export interface Customer {
   id: number
   name: string

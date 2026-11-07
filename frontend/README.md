@@ -55,6 +55,15 @@ como `/api`; URLs externas não são aceitas neste fluxo de sessão. Variáveis
 | `POST /api/auth/login/` | JSON `{username, password}`, cookie CSRF e `X-CSRFToken`; retorna sessão |
 | `POST /api/auth/logout/` | Cookie CSRF e `X-CSRFToken`; invalida sessão e retorna usuário nulo |
 | `GET /api/vehicles/` | Estoque autorizado, com filtros `store`, `brand` exata, `status`, `page` |
+| `GET /api/stores/` | Lista sem paginação das lojas vinculadas ao usuário: `[{id, name, role}]` |
+
+Na Etapa 3.3.2, `services/stores.ts` disponibiliza `listStores(signal?)`, com
+retorno `Promise<Store[]>`. Os tipos `Store` e `StoreRole` ficam em `types/api.ts`.
+O papel é específico de cada loja; lojas sem veículos também são retornadas.
+Sem vínculos, a resposta é `[]`, inclusive para superusuários. O endpoint permite
+somente GET, HEAD e OPTIONS e não oferece rota de detalhe ou filtros por usuário.
+O serviço reutiliza o cliente HTTP de sessão, sem alterar o layout nem adicionar
+formulários. Contrato e roteiro manual: [Etapa 3.3.2](../docs/ETAPA3.3.2.md).
 
 `services/api.ts` centraliza Fetch, tipos, cookies, CSRF, cancelamento e erros.
 Antes de cada escrita, consulta um token CSRF fresco na sessão. Isso acomoda a

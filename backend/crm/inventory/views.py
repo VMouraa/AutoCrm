@@ -1,7 +1,24 @@
 from rest_framework import viewsets
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.generics import ListAPIView
+from rest_framework.permissions import IsAuthenticated
 from .models import StoreMembership, Vehicle
-from .serializers import VehicleSerializer
+from .serializers import StoreAccessSerializer, VehicleSerializer
+
+
+class StoreListView(ListAPIView):
+    serializer_class = StoreAccessSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ["get", "head", "options"]
+    # Return every accessible store, including empty stores, for store selectors.
+    pagination_class = None
+
+    def get_queryset(self):
+        return (
+            StoreMembership.objects.filter(user=self.request.user)
+            .select_related("store")
+            .order_by("store__name", "store_id")
+        )
 
 def parse_store_id(value):
     try:
