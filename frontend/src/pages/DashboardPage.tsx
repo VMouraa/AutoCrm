@@ -17,7 +17,7 @@ export function DashboardPage() {
           <article key={label} className="panel p-5">
             <div className="flex items-center justify-between gap-2"><h2 className="text-sm font-medium text-slate-600">{label}</h2><Icon size={19} className="text-brand" aria-hidden="true" /></div>
             <p className="my-4 text-3xl font-semibold text-slate-300" aria-label="Indicador indisponível">—</p>
-            <p className="text-xs text-slate-500">Disponível após integração com a API</p>
+            <p className="text-xs text-slate-500">Indicador ainda não implementado</p>
           </article>
         ))}
       </section>

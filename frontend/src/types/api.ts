@@ -1,3 +1,13 @@
+export interface SessionUser {
+  id: number
+  username: string
+}
+
+export interface Session {
+  user: SessionUser | null
+  csrfToken: string
+}
+
 export interface PaginatedResponse<T> {
   count: number
   next: string | null

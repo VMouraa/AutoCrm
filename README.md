@@ -1,7 +1,8 @@
 ﻿# AutoCRM — CRM para revendas de veículos
 
-Backend em desenvolvimento com Django REST Framework e SQLite. Frontend inicial
-em React, TypeScript, Vite e Tailwind CSS, com Dashboard, Estoque e Clientes.
+Backend em desenvolvimento com Django REST Framework e SQLite. Frontend
+em React, TypeScript, Vite e Tailwind CSS, com autenticação por sessão e
+consulta real do estoque. Dashboard e Clientes mantêm telas preparatórias.
 Consulte [como executar e entender o frontend](frontend/README.md).
 
 ## Arquitetura
@@ -32,6 +33,68 @@ O ambiente desta revisão está em `.venv/` na raiz; o banco em `backend/db.sqli
 Acesse http://127.0.0.1:8000/admin/ e autentique-se. A API usa sessão e exige
 CSRF para escritas. Cadastre Store e StoreMembership pelo Admin; não existem
 endpoints de gerenciamento de lojas/associações.
+
+Em outro terminal, a partir da raiz, com Node.js 22.13+ (série 22) ou 24+:
+
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
+
+Abra http://127.0.0.1:5173/estoque e entre com o usuário criado no Django.
+Não é necessário entrar pelo Admin antes de usar o React. Mesmo um superusuário
+precisa de uma **StoreMembership** para consultar os veículos de uma loja na API.
+Cadastre veículos pelo Admin ou pelos recursos existentes da API; a interface
+desta etapa é de consulta. Não são criados dados de demonstração.
+
+### Autenticação do React
+
+- `GET /api/auth/session/`: retorna `{user, csrfToken}`; `user` é nulo sem sessão
+  ou contém somente `id` e `username`. Também fornece o cookie CSRF.
+- `POST /api/auth/login/`: JSON com `username` e `password`, cookie CSRF e
+  cabeçalho `X-CSRFToken`. Retorna a sessão e um token CSRF após sua rotação.
+- `POST /api/auth/logout/`: exige CSRF e invalida a sessão no servidor.
+- O cliente usa Fetch na mesma origem e cookies de sessão do Django (HttpOnly).
+  Senhas ficam apenas no formulário durante a tentativa de login; não há
+  persistência de senhas, tokens ou sessão em localStorage/sessionStorage.
+- O proxy existente do Vite encaminha `/api` para `127.0.0.1:8000`. O Django
+  confia nas origens locais `http://127.0.0.1:5173` e `http://localhost:5173`
+  quando DEBUG está ativo, preservando a verificação CSRF. Para outra origem,
+  configure `DJANGO_CSRF_TRUSTED_ORIGINS` no ambiente do processo Django,
+  com URLs completas separadas por vírgulas. Não há liberação de CORS.
+- O DRF retorna 403 tanto sem sessão quanto por falta de permissão. O cliente
+  consulta a sessão após 401/403: sem usuário, remove os dados protegidos e
+  solicita novo login; com usuário válido, exibe o erro de acesso.
+
+Use `127.0.0.1` consistentemente ao alternar entre React e Admin. O proxy
+de desenvolvimento não existe em produção: publique frontend e `/api` na mesma
+origem, com HTTPS e configuração própria do Django. O preview do Vite serve
+somente arquivos do build e não substitui essa infraestrutura.
+
+### Verificação da Etapa 3.2
+
+Execute os testes do Django **dentro de `backend/`**, onde está `pytest.ini`:
+
+```powershell
+cd backend
+..\.venv\Scripts\python -m pytest -q
+..\.venv\Scripts\python manage.py check
+..\.venv\Scripts\python manage.py makemigrations --check --dry-run
+..\.venv\Scripts\python -m pip check
+```
+
+Em outro terminal, dentro de `frontend/`:
+
+```powershell
+npm test
+npm run lint
+npm run build
+```
+
+Roteiro manual, contratos, arquivos e resultados estão em
+[frontend/README.md](frontend/README.md) e no
+[relatório da Etapa 3.2](docs/ETAPA3.2.md).
 
 ## API e isolamento
 
@@ -95,9 +158,15 @@ SQLite e validadores de senha vazios. Produção requer configuração própria,
 segredos, HTTPS, backups e revisão de permissões. Não há CI configurado.
 Transições de status seguem as opções do modelo, sem regras comerciais extras.
 Importação não possui interface nem integração ativa com terceiros.
-Integração do React com a API, funil, negociações, distribuição de leads,
-notificações, Radar e relatórios permanecem planejados.
+Consulta de clientes pelo React, indicadores do Dashboard, funil, negociações,
+distribuição de leads, notificações, Radar e relatórios permanecem planejados.
 
 O projeto contém repositório Git. Inclua migrações e lockfiles no versionamento.
 
-Resultado local: **24 testes passaram**; manage.py check sem problemas; nenhuma alteração de modelo sem migração; pip check sem dependências quebradas. Validação local, sem CI ou teste em produção.
+Resultado da Etapa 3.2: **41 testes do backend e 22 do frontend passaram**;
+lint e build aprovados; manage.py check sem problemas; nenhuma alteração de
+modelo sem migração; pip check sem dependências quebradas. Instalação limpa com
+`npm ci` e conferência HTTP do proxy aprovadas. Auditoria: zero vulnerabilidades
+em produção e dez avisos moderados nas ferramentas de lint. Validação local,
+sem CI, E2E em navegador ou teste em produção. Detalhes em
+[docs/ETAPA3.2.md](docs/ETAPA3.2.md).

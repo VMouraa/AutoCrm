@@ -2,14 +2,26 @@ import { useEffect, useRef, useState } from 'react'
 import { CarFront, ChevronRight, Menu, ShieldCheck, X } from 'lucide-react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { Navigation } from '../components/Navigation'
+import { useAuth } from '../auth/context'
 
 const pageNames: Record<string, string> = { '/': 'Dashboard', '/estoque': 'Estoque', '/clientes': 'Clientes' }
 
 export function AppLayout() {
+  const { state, signOut } = useAuth()
+  const [signingOut, setSigningOut] = useState(false)
+  const [logoutError, setLogoutError] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const dialog = useRef<HTMLDialogElement>(null)
   const { pathname } = useLocation()
   const pageName = pageNames[pathname] || 'Página não encontrada'
+
+  async function handleLogout() {
+    setSigningOut(true)
+    setLogoutError('')
+    try { await signOut() }
+    catch (error) { setLogoutError(error instanceof Error ? error.message : 'Não foi possível sair. Tente novamente.') }
+    finally { setSigningOut(false) }
+  }
 
   useEffect(() => { document.title = `${pageName} | AutoCRM` }, [pageName])
   useEffect(() => {
@@ -30,7 +42,7 @@ export function AppLayout() {
         <p className="text-sm font-medium text-white">Uma base para crescer</p>
         <p className="mt-2 text-xs leading-5 text-slate-400">Clientes e estoque em um só espaço de gestão.</p>
       </div>
-      <p className="mt-6 text-xs text-slate-400">AutoCRM <span className="float-right">Etapa 3.1</span></p>
+      <p className="mt-6 text-xs text-slate-400">AutoCRM <span className="float-right">Etapa 3.2</span></p>
     </div>
   </>
 
@@ -50,8 +62,9 @@ export function AppLayout() {
               aria-label="Abrir menu" className="rounded-lg p-2 text-navy hover:bg-slate-100 lg:hidden"><Menu size={22} /></button>
             <div className="flex items-center gap-3 text-sm"><span className="hidden text-slate-400 sm:inline">Área de gestão</span><ChevronRight size={14} className="hidden text-slate-300 sm:block" aria-hidden="true" /><span className="font-medium text-navy">{pageName}</span></div>
           </div>
-          <span className="flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1.5 text-xs text-slate-600"><span className="h-1.5 w-1.5 rounded-full bg-slate-400" />Estrutura inicial</span>
+          <div className="flex min-w-0 items-center gap-3"><span className="hidden max-w-40 truncate text-sm text-slate-600 sm:block">{state.status === 'authenticated' ? state.user.username : ''}</span><button className="secondary-button" onClick={handleLogout} disabled={signingOut}>{signingOut ? 'Saindo…' : 'Sair'}</button></div>
         </header>
+        {logoutError && <p role="alert" className="border-b border-red-100 bg-red-50 px-5 py-3 text-sm text-red-700 sm:px-9">{logoutError}</p>}
         <main id="conteudo" tabIndex={-1} className="mx-auto max-w-[1440px] p-5 outline-none sm:p-9 lg:p-10"><Outlet /></main>
         <footer className="mx-5 flex flex-wrap justify-between gap-2 border-t border-slate-200 py-5 text-xs text-slate-500 sm:mx-9 lg:mx-10"><span>AutoCRM · Gestão automotiva</span><span>Seu próximo passo começa com organização.</span></footer>
       </div>

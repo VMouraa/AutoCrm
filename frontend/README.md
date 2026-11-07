@@ -1,13 +1,34 @@
-# AutoCRM — Etapa 3.1
+﻿# AutoCRM — Etapa 3.2
 
-Estrutura inicial do frontend, sem alteração do backend. As telas não consultam
-a API e não contêm dados de demonstração: “—” significa indicador indisponível,
-não zero. Estoque e Clientes não afirmam que o banco está vazio.
+React 19, TypeScript, Vite 7 e Tailwind CSS 4 conectados ao Django por sessão.
+O login e a consulta de Estoque usam a API real. Dashboard e Clientes continuam
+preparatórios: seus avisos e indicadores não representam dados consultados.
+Não há dados fictícios de fallback nem cadastro de veículos pelo React.
 
-## Executar
+## Iniciar localmente
 
-Use Node.js 22.13+ na série 22, ou 24+ (recomendado: LTS)
-e npm. Em um terminal PowerShell, a partir da raiz:
+Pré-requisitos: Python 3.13 e Node.js 22.13+ na série 22, ou 24+; npm.
+No PowerShell, a partir da raiz do repositório, prepare o backend:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\python -m pip install -r backend/requirements-lock.txt
+cd backend
+..\.venv\Scripts\python manage.py migrate
+..\.venv\Scripts\python manage.py createsuperuser
+..\.venv\Scripts\python manage.py runserver
+```
+
+Se o ambiente e o usuário já existem, basta iniciar o servidor. No Linux/macOS,
+use os caminhos equivalentes em `.venv/bin/python`.
+
+No Admin em http://127.0.0.1:8000/admin/, cadastre **Store**, associe o usuário
+à loja em **StoreMembership** (seller ou manager) e cadastre veículos reais.
+Até superusuários precisam de associação à loja para ler seu estoque pela API.
+Usuários ativos comuns podem entrar no React sem acesso ao Admin; um gerente
+ou administrador deve preparar suas associações e o estoque.
+
+Em outro terminal, a partir da raiz:
 
 ```powershell
 cd frontend
@@ -15,136 +36,144 @@ npm ci
 npm run dev
 ```
 
-Abra http://127.0.0.1:5173. O servidor usa essa porta fixa. Não é necessário
-executar o Django para navegar nesta etapa. `npm ci` reproduz as versões de
-`package-lock.json`; `npm install` serve para alterações de dependências.
+Abra http://127.0.0.1:5173/estoque e entre com usuário e senha do Django.
+O login preserva a URL solicitada. Ao recarregar, o React consulta a sessão.
+O Django precisa estar em execução. Use `127.0.0.1` consistentemente no React
+e no Admin; `localhost` possui cookies próprios.
+
+## Comunicação e autenticação
+
+O proxy de desenvolvimento já existente encaminha `/api` ao Django, por padrão
+`http://127.0.0.1:8000`. Pode-se copiar `.env.example` para `.env.local` e alterar
+`DJANGO_PROXY_TARGET`. `VITE_API_BASE_URL` aceita um caminho na mesma origem,
+como `/api`; URLs externas não são aceitas neste fluxo de sessão. Variáveis
+`VITE_*` são públicas e nunca devem conter segredos.
+
+| Método e rota | Contrato |
+| --- | --- |
+| `GET /api/auth/session/` | `{user: {id, username} ou null, csrfToken}`; também fornece cookie CSRF |
+| `POST /api/auth/login/` | JSON `{username, password}`, cookie CSRF e `X-CSRFToken`; retorna sessão |
+| `POST /api/auth/logout/` | Cookie CSRF e `X-CSRFToken`; invalida sessão e retorna usuário nulo |
+| `GET /api/vehicles/` | Estoque autorizado, com filtros `store`, `brand` exata, `status`, `page` |
+
+`services/api.ts` centraliza Fetch, tipos, cookies, CSRF, cancelamento e erros.
+Antes de cada escrita, consulta um token CSRF fresco na sessão. Isso acomoda a
+rotação feita pelo Django no login e também um login em outra aba. Os endpoints
+de autenticação não usam cache. O cookie de sessão permanece HttpOnly conforme
+os padrões do Django; nenhuma senha ou token é gravado em localStorage ou
+sessionStorage. A senha é limpa após a tentativa de login.
+
+O Django usa `SessionAuthentication` e `IsAuthenticated`. Seu DRF devolve 403
+quando falta sessão e também quando faltam permissões. Depois de 401/403 em um
+recurso protegido, o cliente consulta a sessão: se não há usuário, desmonta as
+telas protegidas e solicita novo login com aviso de expiração; se há usuário,
+mostra o erro de acesso e mantém a sessão. Uma senha incorreta no login gera
+mensagem própria, sem aviso indevido de sessão expirada. Falhas de rede, proxy,
+consulta da sessão e logout apresentam erros com possibilidade de repetir.
+
+O proxy troca o Host para o do Django e preserva Origin. Por isso,
+`CSRF_TRUSTED_ORIGINS` aceita somente `http://127.0.0.1:5173` e
+`http://localhost:5173` por padrão quando DEBUG está ativo. Para outro endereço,
+configure `DJANGO_CSRF_TRUSTED_ORIGINS` no ambiente do processo Django com URLs
+completas separadas por vírgulas. No PowerShell, antes de iniciar o Django:
 
 ```powershell
+$env:DJANGO_CSRF_TRUSTED_ORIGINS = 'http://127.0.0.1:5173,http://localhost:5173'
+```
+
+Não foi desativada a proteção CSRF nem adicionada liberação de CORS. O login é
+uma view Django protegida mesmo quando o usuário ainda é anônimo. Só usar a
+verificação de CSRF do DRF no login deixaria essa proteção incompleta.
+
+Referência de CSRF: [documentação do Django](https://docs.djangoproject.com/en/5.2/ref/csrf/).
+Proxy: [documentação do Vite](https://vite.dev/config/server-options#server-proxy).
+
+## Estoque e paginação
+
+A resposta DRF é `{count, next, previous, results}`, com 20 itens por página.
+A tela usa `count` e a presença de `next`/`previous` para navegação. As chamadas
+continuam relativas ao proxy, incrementando ou decrementando `page`; não seguem
+as URLs absolutas que o Django pode gerar com a porta 8000. Filtros novos voltam
+à página 1. Mudanças de consulta cancelam pedidos anteriores, evitando exibir
+resultados atrasados. A tela não conserva dados de uma consulta anterior quando
+começa outra; mostra carregamento, resultado, vazio ou erro separadamente.
+
+Os cards mostram somente campos existentes no serializer: marca, modelo, versão,
+ano, quilometragem, câmbio, combustível, preço, disponibilidade, tipo de estoque
+e ID da loja. Não há nome de loja nem foto no contrato atual. Campos opcionais
+vazios são identificados como não informados. `price` permanece string no
+contrato e é convertido apenas para apresentação em reais.
+
+O backend continua limitando a leitura às associações do usuário. Filtros não
+ampliam esse acesso. Escritas permanecem limitadas a gerentes da loja. Uma lista
+vazia significa apenas ausência de veículos acessíveis nos filtros atuais.
+Sem associação à loja, o resultado também será vazio. Nenhum modelo, serializer,
+permissão de recurso ou regra de negócio foi alterado.
+
+## Verificar
+
+Dentro de `frontend/`:
+
+```powershell
+npm test
 npm run lint
 npm run build
-npm run preview
+npm run test:watch
 npm audit
 npm audit --omit=dev
 ```
 
-`lint` verifica regras estáticas e Hooks. `build` verifica TypeScript e gera
-`dist/`. `preview` serve esse build localmente, não é um servidor de produção.
-Ainda não há suíte automatizada de testes de interface. Para revisão manual:
-acesse Dashboard, Estoque e Clientes, recarregue cada URL, tente um endereço
-inexistente e, em largura de celular, abra o menu, navegue e feche com Escape.
-Verifique também navegação por Tab e o link “Pular para o conteúdo”.
+`npm test` executa Vitest, Testing Library e jsdom. Os testes de interface montam
+a aplicação em StrictMode e simulam a fronteira Fetch; as fixtures existem
+somente nos arquivos de teste. Não substituem uma verificação visual em navegador.
+`build` também checa TypeScript nos testes e na configuração do Vitest.
 
-## Bibliotecas e configurações
+Dentro de `backend/`, onde está `pytest.ini`:
 
-- React 19 e React DOM: componentes e renderização no navegador.
-- TypeScript 5.9: contratos de dados, propriedades e checagem estática estrita.
-- Vite 7 e plugin React: servidor de desenvolvimento, atualização rápida e build.
-- Tailwind CSS 4 e `@tailwindcss/vite`: utilitários CSS compilados pelo Vite.
-- React Router 7: rotas `/`, `/estoque`, `/clientes` e página 404.
-- Lucide React: ícones SVG, sem biblioteca de componentes adicional.
-- ESLint e plugins: análise estática de TypeScript, Hooks e Fast Refresh.
-
-O Tailwind 4 usa `@import "tailwindcss"` em `src/styles/index.css` e o plugin
-em `vite.config.ts`. A identidade fica no bloco `@theme`: marinho `#0d2039`,
-azul `#004A8C` e fundo neutro. Não é necessário `tailwind.config.js`, PostCSS
-separado ou o comando `tailwindcss init` da versão 3.
-Referência: https://tailwindcss.com/docs/installation/using-vite.
-
-## Organização e fluxo React
-
-```text
-src/
-  main.tsx              entrada, StrictMode e BrowserRouter
-  App.tsx               mapeamento de URLs para páginas
-  layouts/AppLayout.tsx sidebar, cabeçalho, menu móvel e Outlet
-  components/           Navigation, PageHeading, ConnectionNotice, EmptyState
-  pages/                DashboardPage, InventoryPage, CustomersPage, NotFoundPage
-  services/             cliente HTTP e consultas de clientes/veículos
-  types/api.ts          contratos do DRF e paginação
-  styles/index.css      Tailwind, cores e estilos compartilhados
+```powershell
+..\.venv\Scripts\python -m pytest -q
+..\.venv\Scripts\python manage.py check
+..\.venv\Scripts\python manage.py makemigrations --check --dry-run
+..\.venv\Scripts\python -m pip check
 ```
 
-`main.tsx` monta o React em `#root` do `index.html`. O `BrowserRouter` permite
-que links alterem a URL sem recarregar a página. `App` escolhe a página e a
-renderiza dentro do `Outlet` do `AppLayout`, preservando a estrutura comum.
-`NavLink` marca a página ativa. O layout usa `useState` para controlar o menu
-móvel, `useRef` para acessar o diálogo nativo e `useEffect` para sincronizá-lo
-e atualizar o título da aba. O diálogo gerencia foco e Escape.
+Os novos testes de backend usam sessões reais com `enforce_csrf_checks=True`,
+sem `force_authenticate`, e um banco de testes isolado. Verificam login, logout,
+rotação do CSRF, origens, usuário inativo, isolamento entre lojas e paginação.
+Consulte os resultados finais no [relatório da entrega](../docs/ETAPA3.2.md).
 
-Componentes recebem **props**: por exemplo, `PageHeading` recebe título e
-descrição, e `EmptyState` recebe também um ícone. Isso permite reutilizar o
-mesmo visual em páginas diferentes. As páginas são composições desses blocos.
-O estado do menu pertence ao layout; os serviços não dependem de componentes.
-Quando a integração for implementada, páginas/hooks poderão chamar os serviços
-e representar carregamento, sucesso, vazio e erro separadamente.
+## Roteiro manual
 
-`tsconfig*.json` separa a aplicação do código Node do Vite. `eslint.config.js`
-define as regras de qualidade. `package.json` declara scripts e dependências;
-`package-lock.json` fixa as versões efetivas. `index.html` configura idioma,
-metadados e ponto de entrada.
+1. Inicie os dois servidores e abra `/estoque` sem sessão: deve aparecer login.
+2. Informe senha incorreta: confira a mensagem e que a senha foi limpa.
+3. Entre com usuário associado a uma loja com veículos reais. Confira os cards
+   com os registros do Django, valores em reais e estados de disponibilidade.
+4. Aplique marca exata, ID da loja e status; confirme retorno à página 1.
+   Com mais de 20 veículos acessíveis, avance e retorne pelas páginas.
+5. Consulte com filtros sem resultados e com usuário sem associação a lojas:
+   confira o estado vazio. Um usuário de outra loja não deve ver seu estoque.
+6. Saia pelo React e confira que os dados desaparecem. Entre novamente e
+   recarregue `/estoque`: a sessão deve ser reconhecida sem um novo login.
+7. Com o estoque aberto, saia pelo Admin em outra aba do mesmo host, ou remova
+   o cookie `sessionid` nas ferramentas do navegador. Clique em Filtrar estoque:
+   deve aparecer aviso de sessão expirada e novo login, sem os cards anteriores.
+8. Pare o Django e consulte o estoque ou recarregue a página. Confira o erro,
+   reinicie o Django e use Tentar novamente. Um erro não deve parecer lista vazia.
+9. Nas ferramentas de rede, confira login/logout por POST com `X-CSRFToken`;
+   sem esse cabeçalho ou com Origin não confiável, o Django deve rejeitar o POST.
+10. Em 360 px, tablet e desktop, confira cards, filtros, botões, menu móvel,
+    navegação por Tab, foco visível e fechamento do menu por Escape.
 
-## Preparação para a API Django
+## Produção e escopo
 
-Opcionalmente copie `.env.example` para `.env.local`. Variáveis `VITE_*` são
-públicas no navegador: nunca coloque segredos nelas.
+`npm run build` gera `dist/`. `npm run preview` serve apenas esse build para
+inspeção e não configura o proxy de `/api` usado no desenvolvimento. A publicação
+precisa servir o frontend e encaminhar `/api` na mesma origem, com fallback das
+rotas do React para `index.html`, preservando as rotas do backend. HTTPS, segredos,
+cookies seguros e demais configurações de produção pertencem à implantação.
 
-`apiGet<T>` usa Fetch nativo, `credentials: 'include'`, cancelamento por
-`AbortSignal` e `ApiError` com status e detalhes. Erros de rede continuam sendo
-erros nativos do Fetch. O tipo genérico ajuda na compilação, mas não valida
-respostas em tempo de execução. Não há fallback para dados fictícios.
-
-- `listCustomers({ search, page }, signal)` → `GET /api/customers/`.
-- `listVehicles({ store, status, brand, page }, signal)` → `GET /api/vehicles/`.
-- Retorno paginado: `count`, `next`, `previous`, `results` (20 por página no backend).
-- O preço do veículo permanece string, como o Decimal serializado pelo DRF.
-
-O proxy de desenvolvimento encaminha `/api` ao Django em
-`http://127.0.0.1:8000`, evitando CORS nas consultas locais. Use `127.0.0.1`
-consistentemente no frontend e no Admin para os cookies locais. O proxy não
-cria sessão nem ignora permissões: chamadas sem sessão podem retornar 403.
-As telas ainda não chamam os serviços, e não há fluxo de login implementado.
-
-Escritas futuras precisam de `X-CSRFToken`, sessão válida e definição do fluxo
-de autenticação. Este proxy de leitura não configura origens confiáveis para
-escrita. Definir isso pertence à etapa de integração; não alteramos CORS,
-CSRF ou autenticação do backend aqui. Clientes são isolados por usuário;
-estoque, por associação à loja, com escrita limitada a gerentes.
-
-Em produção, publique `dist/`, configure fallback das rotas para `index.html`
-(preservando `/api` e arquivos estáticos) e encaminhe a API no mesmo domínio,
-ou configure explicitamente cookies/CORS/CSRF no backend. O proxy do Vite só
-existe no servidor de desenvolvimento. `VITE_API_BASE_URL` é aplicado no build.
-
-## Escopo
-
-Incluídos: layout responsivo, navegação, acessibilidade básica, páginas iniciais,
-tipos, serviços de leitura e configuração reproduzível. Não incluídos: login,
-CRUD na interface, consultas reais, gráficos, funil Kanban, distribuição de
-leads ou Radar de Oportunidades.
-
-## Análise da base antes da implementação
-
-A pasta `frontend/src` estava vazia, sem `package.json`, Vite ou Tailwind.
-O backend usa Django 5.2, DRF, SQLite, pytest e pytest-django, com modelos de
-clientes, lojas, associações e veículos. Já existem CRUD, busca de clientes,
-filtros de estoque, paginação e serviço de importação validado, sem integração
-ativa com terceiros. A API exige autenticação por sessão e CSRF nas escritas.
-Não existe endpoint de login para o frontend ou resumo de Dashboard. O projeto
-não tinha CI. Nenhum arquivo do backend foi alterado nesta etapa.
-
-## Verificações desta entrega
-
-- `npm run lint`: passou, inclusive após atualização das ferramentas de lint.
-- `npm run build`: passou, com checagem TypeScript e build de produção.
-- `npm audit --omit=dev`: nenhuma vulnerabilidade reportada.
-- `npm audit`: 12 avisos moderados na cadeia de ferramentas de lint, associados
-  ao `minimatch`, sem correção disponível no relatório atual, mesmo após
-  atualizar o ESLint. Não foi forçada uma substituição de versão principal de
-  uma dependência transitiva. Reavaliar quando os mantenedores publicarem correções.
-- Servidor Vite: respondeu HTTP 200 aos acessos diretos de `/`, `/estoque`,
-  `/clientes` e uma rota desconhecida (fallback SPA; a página 404 é do React).
-- A validação visual e interativa não foi concluída: o host de acesso ao
-  navegador automatizado estava indisponível. O roteiro manual está acima.
-
-As verificações HTTP não executam JavaScript nem substituem testes de navegação
-e responsividade no navegador.
+A identidade visual anterior foi mantida: marinho `#0d2039`, azul `#004a8c`,
+fundo neutro, sidebar e menu móvel. Não foram implementados CRUD pela interface,
+consulta de clientes, indicadores do Dashboard, Kanban, distribuição de leads,
+Radar, relatórios avançados ou WhatsApp. Não há CI nem E2E em navegador nesta
+entrega; a suíte React usa DOM simulado e a suíte Django usa banco de testes.

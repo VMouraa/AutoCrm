@@ -16,6 +16,10 @@
 }
 
 @layer components {
+  .primary-button { @apply inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-navy disabled:cursor-not-allowed disabled:opacity-50; }
+  .secondary-button { @apply rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-navy hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50; }
+  .field-label { @apply mb-2 block text-sm font-medium text-navy; }
+  .text-input { @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-navy disabled:opacity-60; }
   .panel { @apply rounded-2xl border border-slate-200 bg-white shadow-xs; }
   .eyebrow { @apply text-[10px] font-bold tracking-[0.18em] text-brand; }
   .nav-link { @apply flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white; }
