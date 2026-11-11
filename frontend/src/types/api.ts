@@ -54,3 +54,7 @@ export interface Vehicle {
   created_at: string
   updated_at: string
 }
+
+/** Campos aceitos no cadastro manual; os opcionais seguem o serializer Django. */
+export type VehicleCreateInput = Pick<Vehicle, 'store' | 'brand' | 'model' | 'year' | 'mileage' | 'price'>
+  & Partial<Pick<Vehicle, 'trim' | 'transmission' | 'fuel' | 'status' | 'stock_type'>>

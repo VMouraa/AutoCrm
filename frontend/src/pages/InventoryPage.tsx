@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { CarFront } from 'lucide-react'
 import { PageHeading } from '../components/PageHeading'
 import { EmptyState } from '../components/EmptyState'
+import { VehicleCreateForm } from '../components/VehicleCreateForm'
 import { listVehicles } from '../services/vehicles'
-import type { PaginatedResponse, Vehicle } from '../types/api'
+import { listStores } from '../services/stores'
+import type { PaginatedResponse, Store, Vehicle } from '../types/api'
 
 const statusLabels: Record<Vehicle['status'], string> = { available: 'Disponível', reserved: 'Reservado', sold: 'Vendido' }
 const stockLabels: Record<Vehicle['stock_type'], string> = { owned: 'Próprio', consignment: 'Consignado', wholesale: 'Repasse' }
@@ -19,6 +21,13 @@ interface InventoryQuery {
 }
 
 export function InventoryPage() {
+  const [stores, setStores] = useState<Store[] | null>(null)
+  const [storesError, setStoresError] = useState('')
+  const [storesAttempt, setStoresAttempt] = useState(0)
+  const [creating, setCreating] = useState(false)
+  const [confirmation, setConfirmation] = useState('')
+  const newVehicleButton = useRef<HTMLButtonElement>(null)
+  const filters = useRef<HTMLFormElement>(null)
   const [query, setQuery] = useState<InventoryQuery>({ page: 1 })
   const [result, setResult] = useState<{
     query: InventoryQuery; data?: PaginatedResponse<Vehicle>; error?: string
@@ -26,6 +35,28 @@ export function InventoryPage() {
   const current = result?.query === query ? result : null
   const loading = current === null
   const data = current?.data
+
+  useEffect(() => {
+    const controller = new AbortController()
+    listStores(controller.signal).then(data => {
+      if (!controller.signal.aborted) setStores(data)
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) setStoresError(error instanceof Error ? error.message : 'Não foi possível carregar as lojas.')
+    })
+    return () => controller.abort()
+  }, [storesAttempt])
+
+  function closeCreation() {
+    setCreating(false)
+    newVehicleButton.current?.focus()
+  }
+
+  function created(vehicle: Vehicle) {
+    closeCreation()
+    setConfirmation(`${vehicle.brand} ${vehicle.model} cadastrado com sucesso. Os filtros foram limpos para atualizar o estoque.`)
+    filters.current?.reset()
+    setQuery({ page: 1 })
+  }
 
   useEffect(() => {
     const controller = new AbortController()
@@ -51,9 +82,19 @@ export function InventoryPage() {
   return (
     <>
       <PageHeading eyebrow="GESTÃO DE VEÍCULOS" title="Estoque" description="Um espaço para acompanhar os veículos das suas lojas e suas informações de disponibilidade." />
+      {confirmation && <p role="status" className="mb-6 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-900">{confirmation}</p>}
+      {storesError && <div className="mb-6 rounded-xl border border-red-100 bg-red-50 p-4">
+        <p role="alert" className="text-sm text-red-700">Não foi possível verificar as lojas para cadastro. {storesError}</p>
+        <button className="secondary-button mt-3" onClick={() => { setStoresError(''); setStoresAttempt(attempt => attempt + 1) }}>Tentar carregar lojas novamente</button>
+      </div>}
+      {stores === null && !storesError && <p className="mb-4 text-sm text-slate-500">Verificando permissão de cadastro…</p>}
+      {stores && !stores.some(store => store.role === 'manager') && <p className="mb-4 text-sm text-slate-500">O cadastro de veículos está disponível somente para gerentes de uma loja.</p>}
+      {creating && stores && <VehicleCreateForm stores={stores} onCancel={closeCreation} onCreated={created} />}
       <section className="panel overflow-hidden" aria-label="Consulta de estoque">
-        <div className="section-heading"><h2>Veículos</h2><span>{data ? `${number.format(data.count)} veículo(s) encontrado(s)` : 'Estoque das suas lojas'}</span></div>
-        <form onSubmit={filter} className="grid items-end gap-4 border-b border-slate-100 p-5 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="section-heading"><h2>Veículos</h2><span>{data ? `${number.format(data.count)} veículo(s) encontrado(s)` : 'Estoque das suas lojas'}</span>
+          {stores?.some(store => store.role === 'manager') && <button ref={newVehicleButton} className="primary-button" type="button" aria-expanded={creating} onClick={() => { setConfirmation(''); setCreating(true) }}>Novo veículo</button>}
+        </div>
+        <form ref={filters} onSubmit={filter} className="grid items-end gap-4 border-b border-slate-100 p-5 sm:grid-cols-2 xl:grid-cols-4">
           <div><label className="field-label" htmlFor="brand">Marca exata</label><input className="text-input" id="brand" name="brand" placeholder="Todas as marcas" /></div>
           <div><label className="field-label" htmlFor="store">ID da loja</label><input className="text-input" id="store" name="store" type="number" min="1" step="1" max="9007199254740991" placeholder="Todas as suas lojas" /></div>
           <div><label className="field-label" htmlFor="status">Disponibilidade</label><select className="text-input" id="status" name="status"><option value="">Todos os status</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
@@ -83,7 +124,7 @@ export function InventoryPage() {
           <span>Página {query.page} · {data.results.length} de {number.format(data.count)} veículo(s)</span>
           <div className="flex gap-2"><button className="secondary-button" disabled={!data.previous} onClick={() => setQuery({ ...query, page: query.page - 1 })}>Anterior</button><button className="secondary-button" disabled={!data.next} onClick={() => setQuery({ ...query, page: query.page + 1 })}>Próxima</button></div>
         </nav>}
-        <div className="border-t border-slate-100 bg-slate-50/60 px-6 py-4 text-xs leading-5 text-slate-500">A consulta respeita suas associações às lojas. Cadastro e alteração de veículos pela interface ficam para uma próxima etapa.</div>
+        <div className="border-t border-slate-100 bg-slate-50/60 px-6 py-4 text-xs leading-5 text-slate-500">A consulta respeita suas associações às lojas. Somente gerentes podem cadastrar veículos nas lojas que gerenciam.</div>
       </section>
     </>
   )

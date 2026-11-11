@@ -20,7 +20,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 const inventory = (results: Vehicle[] = [vehicle], extra = {}) => ({ count: results.length, next: null, previous: null, results, ...extra })
 
 function mockApi(handler: (url: string, options?: RequestInit) => Response | Promise<Response>) {
-  const fetcher = vi.fn((url: string, options?: RequestInit) => handler(url, options))
+  const fetcher = vi.fn((url: string, options?: RequestInit) => url === '/api/stores/' ? json([]) : handler(url, options))
   vi.stubGlobal('fetch', fetcher)
   return fetcher
 }

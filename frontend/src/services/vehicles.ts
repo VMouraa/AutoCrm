@@ -1,5 +1,9 @@
-import { apiGet } from './api'
-import type { PaginatedResponse, Vehicle } from '../types/api'
+import { apiGet, apiRequest } from './api'
+import type { PaginatedResponse, Vehicle, VehicleCreateInput } from '../types/api'
+
+export function createVehicle(data: VehicleCreateInput): Promise<Vehicle> {
+  return apiRequest<Vehicle>('vehicles/', { method: 'POST', body: data })
+}
 
 export function listVehicles(filters: {
   store?: number; status?: Vehicle['status']; brand?: string; page?: number

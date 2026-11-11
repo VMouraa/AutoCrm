@@ -2,7 +2,7 @@
 
 Backend em desenvolvimento com Django REST Framework e SQLite. Frontend
 em React, TypeScript, Vite e Tailwind CSS, com autenticação por sessão e
-consulta real do estoque. Dashboard e Clientes mantêm telas preparatórias.
+consulta e cadastro de veículos no estoque. Dashboard e Clientes mantêm telas preparatórias.
 Consulte [como executar e entender o frontend](frontend/README.md).
 
 ## Arquitetura
@@ -45,8 +45,10 @@ npm run dev
 Abra http://127.0.0.1:5173/estoque e entre com o usuário criado no Django.
 Não é necessário entrar pelo Admin antes de usar o React. Mesmo um superusuário
 precisa de uma **StoreMembership** para consultar os veículos de uma loja na API.
-Cadastre veículos pelo Admin ou pelos recursos existentes da API; a interface
-desta etapa é de consulta. Não são criados dados de demonstração.
+Gerentes podem usar **Novo veículo** no estoque do React para cadastrar nas
+lojas que gerenciam. O Django continua validando a permissão por loja.
+Não são criados dados de demonstração. Consulte o
+[relatório da Etapa 3.3.3](docs/ETAPA3.3.3.md) para fluxo, validação e teste manual.
 
 ### Autenticação do React
 

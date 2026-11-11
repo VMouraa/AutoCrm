@@ -1,9 +1,9 @@
-﻿# AutoCRM — Etapa 3.2
+﻿# AutoCRM — Etapa 3.3.3
 
 React 19, TypeScript, Vite 7 e Tailwind CSS 4 conectados ao Django por sessão.
-O login e a consulta de Estoque usam a API real. Dashboard e Clientes continuam
+O login, a consulta de Estoque e o cadastro de veículos usam a API real. Dashboard e Clientes continuam
 preparatórios: seus avisos e indicadores não representam dados consultados.
-Não há dados fictícios de fallback nem cadastro de veículos pelo React.
+Não há dados fictícios de fallback. O cadastro exige papel manager na loja.
 
 ## Iniciar localmente
 
@@ -56,14 +56,30 @@ como `/api`; URLs externas não são aceitas neste fluxo de sessão. Variáveis
 | `POST /api/auth/logout/` | Cookie CSRF e `X-CSRFToken`; invalida sessão e retorna usuário nulo |
 | `GET /api/vehicles/` | Estoque autorizado, com filtros `store`, `brand` exata, `status`, `page` |
 | `GET /api/stores/` | Lista sem paginação das lojas vinculadas ao usuário: `[{id, name, role}]` |
+| `POST /api/vehicles/` | Cadastro por gerente da loja, com sessão e CSRF; retorna veículo (201) ou erros (400/403) |
 
 Na Etapa 3.3.2, `services/stores.ts` disponibiliza `listStores(signal?)`, com
 retorno `Promise<Store[]>`. Os tipos `Store` e `StoreRole` ficam em `types/api.ts`.
 O papel é específico de cada loja; lojas sem veículos também são retornadas.
 Sem vínculos, a resposta é `[]`, inclusive para superusuários. O endpoint permite
 somente GET, HEAD e OPTIONS e não oferece rota de detalhe ou filtros por usuário.
-O serviço reutiliza o cliente HTTP de sessão, sem alterar o layout nem adicionar
-formulários. Contrato e roteiro manual: [Etapa 3.3.2](../docs/ETAPA3.3.2.md).
+O serviço reutiliza o cliente HTTP de sessão. Contrato e roteiro manual dessa
+entrega: [Etapa 3.3.2](../docs/ETAPA3.3.2.md).
+
+Na Etapa 3.3.3, o estoque consulta essas lojas e mostra **Novo veículo** quando
+há ao menos uma associação manager. O formulário oferece somente lojas
+gerenciadas, pré-selecionando quando há uma única opção. Marca, modelo, ano,
+quilometragem, preço e loja são obrigatórios; versão, câmbio e combustível são
+opcionais. Câmbio e combustível são textos livres. Status e tipo de estoque
+começam como disponível e próprio, seguindo os padrões do backend.
+
+O preço aceita vírgula ou ponto decimal, sem separador de milhar, e permanece
+texto até o POST. Campos e botões do formulário ficam desabilitados durante o
+envio, com uma trava imediata contra submissões repetidas. Erros da API aparecem
+no formulário e nos campos, com dados preservados. Após sucesso, o formulário
+fecha, mostra confirmação e consulta novamente a página 1 sem filtros. Se essa
+consulta falhar, **Tentar novamente** repete somente o GET. Detalhes, resultados
+e roteiro manual: [Etapa 3.3.3](../docs/ETAPA3.3.3.md).
 
 `services/api.ts` centraliza Fetch, tipos, cookies, CSRF, cancelamento e erros.
 Antes de cada escrita, consulta um token CSRF fresco na sessão. Isso acomoda a
@@ -182,7 +198,7 @@ rotas do React para `index.html`, preservando as rotas do backend. HTTPS, segred
 cookies seguros e demais configurações de produção pertencem à implantação.
 
 A identidade visual anterior foi mantida: marinho `#0d2039`, azul `#004a8c`,
-fundo neutro, sidebar e menu móvel. Não foram implementados CRUD pela interface,
+fundo neutro, sidebar e menu móvel. Não foram implementados edição ou exclusão pela interface,
 consulta de clientes, indicadores do Dashboard, Kanban, distribuição de leads,
 Radar, relatórios avançados ou WhatsApp. Não há CI nem E2E em navegador nesta
 entrega; a suíte React usa DOM simulado e a suíte Django usa banco de testes.
