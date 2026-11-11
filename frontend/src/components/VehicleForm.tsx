@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, InputHTMLAttributes } from 'react'
 import { ApiError, ConnectionError } from '../services/api'
-import { createVehicle } from '../services/vehicles'
-import type { Store, Vehicle, VehicleCreateInput } from '../types/api'
+import { createVehicle, updateVehicle } from '../services/vehicles'
+import type { Store, Vehicle, VehicleCreateInput, VehicleUpdateInput } from '../types/api'
 
 type Field = keyof VehicleCreateInput
 type FieldErrors = Partial<Record<Field, string>>
@@ -18,8 +18,8 @@ function errorText(value: unknown): string {
   return ''
 }
 
-export function VehicleCreateForm({ stores, onCancel, onCreated }: {
-  stores: Store[]; onCancel: () => void; onCreated: (vehicle: Vehicle) => void
+export function VehicleForm({ stores, vehicle, onCancel, onSaved }: {
+  stores: Store[]; vehicle?: Vehicle; onCancel: () => void; onSaved: (vehicle: Vehicle) => void
 }) {
   const managerStores = stores.filter(store => store.role === 'manager')
   const [pending, setPending] = useState(false)
@@ -40,7 +40,7 @@ export function VehicleCreateForm({ stores, onCancel, onCreated }: {
     const form = new FormData(event.currentTarget)
     const value = (field: Field) => String(form.get(field) ?? '').trim()
     const nextErrors: FieldErrors = {}
-    const store = Number(value('store'))
+    const store = vehicle?.store ?? Number(value('store'))
     if (!managerStores.some(item => item.id === store)) nextErrors.store = 'Selecione uma loja em que você é gerente.'
     for (const [field, max] of [['brand', 80], ['model', 100], ['trim', 120], ['transmission', 30], ['fuel', 30]] as const) {
       if ((field === 'brand' || field === 'model') && !value(field)) nextErrors[field] = 'Preencha este campo.'
@@ -61,12 +61,23 @@ export function VehicleCreateForm({ stores, onCancel, onCreated }: {
     submitting.current = true
     setPending(true)
     try {
-      const vehicle = await createVehicle({
-        store, brand: value('brand'), model: value('model'), trim: value('trim'), year, mileage,
+      const values = {
+        brand: value('brand'), model: value('model'), trim: value('trim'), year, mileage,
         transmission: value('transmission'), fuel: value('fuel'), price,
         status: value('status') as Vehicle['status'], stock_type: value('stock_type') as Vehicle['stock_type'],
-      })
-      onCreated(vehicle)
+      }
+      if (vehicle) {
+        const changes: VehicleUpdateInput = Object.fromEntries(
+          Object.entries(values).filter(([field, next]) => next !== vehicle[field as keyof typeof values]),
+        )
+        if (!Object.keys(changes).length) {
+          setError('Nenhuma alteração para salvar. Altere um campo ou cancele a edição.')
+          return
+        }
+        onSaved(await updateVehicle(vehicle.id, changes))
+      } else {
+        onSaved(await createVehicle({ store, ...values }))
+      }
     } catch (cause: unknown) {
       const fieldErrors: FieldErrors = {}
       const messages: string[] = []
@@ -79,10 +90,12 @@ export function VehicleCreateForm({ stores, onCancel, onCreated }: {
         }
       }
       setErrors(fieldErrors)
-      const fallback = cause instanceof Error ? cause.message : 'Não foi possível cadastrar o veículo. Tente novamente.'
+      const fallback = cause instanceof Error ? cause.message : 'Não foi possível salvar o veículo. Tente novamente.'
       setError(messages.join(' ') || (Object.keys(fieldErrors).length ? 'Revise os campos indicados e tente novamente.' : fallback))
       if (cause instanceof ConnectionError || (cause instanceof ApiError && cause.status >= 500)) {
-        setError(`${fallback} Verifique o estoque antes de tentar novamente para evitar um cadastro duplicado.`)
+        setError(`${fallback} ${vehicle ? 'Verifique o estoque antes de tentar novamente: a atualização pode ter sido gravada.' : 'Verifique o estoque antes de tentar novamente para evitar um cadastro duplicado.'}`)
+      } else if (cause instanceof ApiError && cause.status === 404 && vehicle) {
+        setError('Este veículo não está mais disponível para edição. Ele pode ter sido removido ou seu acesso à loja pode ter mudado. Cancele e consulte o estoque novamente.')
       }
     } finally {
       submitting.current = false
@@ -98,22 +111,24 @@ export function VehicleCreateForm({ stores, onCancel, onCreated }: {
     return errors[field] && <p id={`vehicle-${field}-error`} className="mt-2 text-sm text-red-700">{errors[field]}</p>
   }
   function input(field: Field, props: InputHTMLAttributes<HTMLInputElement> = {}) {
-    return <div key={field}><label className="field-label" htmlFor={`vehicle-${field}`}>{labels[field]}</label><input {...fieldProps(field)} {...props} />{fieldError(field)}</div>
+    return <div key={field}><label className="field-label" htmlFor={`vehicle-${field}`}>{labels[field]}</label><input {...fieldProps(field)} defaultValue={vehicle?.[field]} {...props} />{fieldError(field)}</div>
   }
 
-  return <section className="panel mb-6 p-5 sm:p-6" aria-labelledby="vehicle-create-title">
-    <h2 id="vehicle-create-title" ref={heading} tabIndex={-1} className="text-xl font-semibold text-navy">Novo veículo</h2>
-    <p id="vehicle-create-help" className="mb-5 mt-2 text-sm text-slate-500">Marca, modelo, ano, quilometragem, preço e loja são obrigatórios. Versão, câmbio e combustível são opcionais.</p>
-    <form onSubmit={submit} noValidate aria-label="Cadastro de veículo" aria-describedby="vehicle-create-help" aria-busy={pending}>
+  return <section className="panel mb-6 p-5 sm:p-6" aria-labelledby="vehicle-form-title">
+    <h2 id="vehicle-form-title" ref={heading} tabIndex={-1} className="text-xl font-semibold text-navy">{vehicle ? 'Editar veículo' : 'Novo veículo'}</h2>
+    <p id="vehicle-form-help" className="mb-5 mt-2 text-sm text-slate-500">Marca, modelo, ano, quilometragem, preço e loja são obrigatórios. Versão, câmbio e combustível são opcionais.{vehicle && ' A loja original não pode ser alterada.'}</p>
+    <form onSubmit={submit} noValidate aria-label={vehicle ? 'Edição de veículo' : 'Cadastro de veículo'} aria-describedby="vehicle-form-help" aria-busy={pending}>
       {(error || Object.keys(errors).length > 0) && <div ref={summary} tabIndex={-1} role="alert" className="mb-5 rounded-lg bg-red-50 p-4 text-sm text-red-700">
         <p>{error || 'Revise os campos indicados para continuar.'}</p>
         {Object.keys(errors).length > 0 && <ul className="mt-2 list-inside list-disc">{(Object.keys(errors) as Field[]).map(field => <li key={field}><a href={`#vehicle-${field}`} className="underline">{labels[field]}: {errors[field]}</a></li>)}</ul>}
       </div>}
       <fieldset disabled={pending} className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <legend className="sr-only">Dados do veículo</legend>
-        <div><label className="field-label" htmlFor="vehicle-store">Loja</label><select {...fieldProps('store')} required defaultValue={managerStores.length === 1 ? managerStores[0].id : ''}>
+        <div><label className="field-label" htmlFor="vehicle-store">Loja</label>{vehicle
+          ? <input {...fieldProps('store')} readOnly value={stores.find(store => store.id === vehicle.store)?.name ?? `#${vehicle.store}`} />
+          : <select {...fieldProps('store')} required defaultValue={managerStores.length === 1 ? managerStores[0].id : ''}>
           <option value="">Selecione a loja</option>{managerStores.map(store => <option value={store.id} key={store.id}>{store.name}</option>)}
-        </select>{fieldError('store')}</div>
+        </select>}{fieldError('store')}</div>
         {input('brand', { required: true, maxLength: 80 })}
         {input('model', { required: true, maxLength: 100 })}
         {input('trim', { maxLength: 120 })}
@@ -121,15 +136,15 @@ export function VehicleCreateForm({ stores, onCancel, onCreated }: {
         {input('mileage', { type: 'number', required: true, min: 0, max: Number.MAX_SAFE_INTEGER, step: 1 })}
         {input('transmission', { maxLength: 30 })}
         {input('fuel', { maxLength: 30 })}
-        {input('price', { required: true, inputMode: 'decimal', placeholder: 'Ex.: 119900,00' })}
-        <div><label className="field-label" htmlFor="vehicle-status">Status</label><select {...fieldProps('status')} defaultValue="available">
+        {input('price', { required: true, inputMode: 'decimal', placeholder: 'Ex.: 119900,00', defaultValue: vehicle?.price.replace('.', ',') })}
+        <div><label className="field-label" htmlFor="vehicle-status">Status</label><select {...fieldProps('status')} defaultValue={vehicle?.status ?? 'available'}>
           <option value="available">Disponível</option><option value="reserved">Reservado</option><option value="sold">Vendido</option>
         </select>{fieldError('status')}</div>
-        <div><label className="field-label" htmlFor="vehicle-stock_type">Tipo de estoque</label><select {...fieldProps('stock_type')} defaultValue="owned">
+        <div><label className="field-label" htmlFor="vehicle-stock_type">Tipo de estoque</label><select {...fieldProps('stock_type')} defaultValue={vehicle?.stock_type ?? 'owned'}>
           <option value="owned">Próprio</option><option value="consignment">Consignado</option><option value="wholesale">Repasse</option>
         </select>{fieldError('stock_type')}</div>
         <div className="flex flex-wrap gap-3 sm:col-span-2 xl:col-span-3">
-          <button className="primary-button" type="submit">{pending ? 'Cadastrando…' : 'Cadastrar veículo'}</button>
+          <button className="primary-button" type="submit">{vehicle ? (pending ? 'Salvando…' : 'Salvar alterações') : (pending ? 'Cadastrando…' : 'Cadastrar veículo')}</button>
           <button className="secondary-button" type="button" onClick={onCancel}>Cancelar</button>
         </div>
       </fieldset>

@@ -58,3 +58,6 @@ export interface Vehicle {
 /** Campos aceitos no cadastro manual; os opcionais seguem o serializer Django. */
 export type VehicleCreateInput = Pick<Vehicle, 'store' | 'brand' | 'model' | 'year' | 'mileage' | 'price'>
   & Partial<Pick<Vehicle, 'trim' | 'transmission' | 'fuel' | 'status' | 'stock_type'>>
+
+/** PATCH aceita somente campos editáveis; a loja original é imutável. */
+export type VehicleUpdateInput = Partial<Omit<VehicleCreateInput, 'store'>>

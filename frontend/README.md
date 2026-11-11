@@ -1,7 +1,7 @@
-﻿# AutoCRM — Etapa 3.3.3
+﻿# AutoCRM — Etapa 3.3.4
 
 React 19, TypeScript, Vite 7 e Tailwind CSS 4 conectados ao Django por sessão.
-O login, a consulta de Estoque e o cadastro de veículos usam a API real. Dashboard e Clientes continuam
+O login, a consulta de Estoque, o cadastro e a edição de veículos usam a API real. Dashboard e Clientes continuam
 preparatórios: seus avisos e indicadores não representam dados consultados.
 Não há dados fictícios de fallback. O cadastro exige papel manager na loja.
 
@@ -57,6 +57,7 @@ como `/api`; URLs externas não são aceitas neste fluxo de sessão. Variáveis
 | `GET /api/vehicles/` | Estoque autorizado, com filtros `store`, `brand` exata, `status`, `page` |
 | `GET /api/stores/` | Lista sem paginação das lojas vinculadas ao usuário: `[{id, name, role}]` |
 | `POST /api/vehicles/` | Cadastro por gerente da loja, com sessão e CSRF; retorna veículo (201) ou erros (400/403) |
+| `PATCH /api/vehicles/{id}/` | Atualização parcial por gerente da loja original; retorna veículo (200), validação (400), acesso negado (403) ou veículo inacessível (404) |
 
 Na Etapa 3.3.2, `services/stores.ts` disponibiliza `listStores(signal?)`, com
 retorno `Promise<Store[]>`. Os tipos `Store` e `StoreRole` ficam em `types/api.ts`.
@@ -80,6 +81,21 @@ no formulário e nos campos, com dados preservados. Após sucesso, o formulário
 fecha, mostra confirmação e consulta novamente a página 1 sem filtros. Se essa
 consulta falhar, **Tentar novamente** repete somente o GET. Detalhes, resultados
 e roteiro manual: [Etapa 3.3.3](../docs/ETAPA3.3.3.md).
+
+Na Etapa 3.3.4, cada card de uma loja gerenciada oferece **Editar**. O mesmo
+`VehicleForm` atende cadastro e edição, com dados atuais do card e loja somente
+para leitura. É possível alterar os demais campos, incluindo status disponível,
+reservado e vendido. O PATCH envia somente diferenças, sem `store` ou campos de
+origem, referência e auditoria. Sem alterações, o formulário não envia PATCH.
+
+Depois de editar, o estoque consulta novamente os filtros e a página atuais.
+O veículo deixa a lista se não atender mais aos filtros; se a página deixar de
+existir, a tela recua até uma página válida. A confirmação informa o status salvo
+mesmo quando o veículo sai do filtro. Um erro na consulta posterior permite
+repetir somente o GET. Falhas na escrita preservam os campos e não geram reenvio
+automático. Um único formulário fica aberto por vez. A API continua verificando
+o papel na loja, inclusive se a permissão mudar durante a edição.
+Veja o [relatório da Etapa 3.3.4](../docs/ETAPA3.3.4.md) para testes e revisão manual.
 
 `services/api.ts` centraliza Fetch, tipos, cookies, CSRF, cancelamento e erros.
 Antes de cada escrita, consulta um token CSRF fresco na sessão. Isso acomoda a
@@ -198,7 +214,7 @@ rotas do React para `index.html`, preservando as rotas do backend. HTTPS, segred
 cookies seguros e demais configurações de produção pertencem à implantação.
 
 A identidade visual anterior foi mantida: marinho `#0d2039`, azul `#004a8c`,
-fundo neutro, sidebar e menu móvel. Não foram implementados edição ou exclusão pela interface,
+fundo neutro, sidebar e menu móvel. Não foram implementados exclusão ou upload de imagens pela interface,
 consulta de clientes, indicadores do Dashboard, Kanban, distribuição de leads,
 Radar, relatórios avançados ou WhatsApp. Não há CI nem E2E em navegador nesta
 entrega; a suíte React usa DOM simulado e a suíte Django usa banco de testes.
